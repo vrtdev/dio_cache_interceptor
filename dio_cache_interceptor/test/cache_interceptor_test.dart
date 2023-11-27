@@ -34,8 +34,6 @@ void main() {
     );
   });
 
-  // TODO re-enable this test when Dio team has fixed CancelToken().cancel()
-  // new behaviour
   // test('Fetch canceled', () async {
   //   try {
   //     await dio.get(
@@ -94,6 +92,25 @@ void main() {
     final resp304 = await dio.get(
       '${MockHttpClientAdapter.mockBase}/ok',
       options: Options(headers: {'if-none-match': resp.headers['etag']}),
+    );
+    expect(resp304.statusCode, equals(304));
+    expect(resp.data['path'], equals('/ok'));
+    expect(resp304.extra[CacheResponse.cacheKey], equals(cacheKey));
+    expect(resp304.extra[CacheResponse.fromNetwork], isTrue);
+    expect(resp304.headers['etag'], equals(['5678']));
+  });
+
+  test('Fetch 304 handle in response flow', () async {
+    final resp = await dio.get('${MockHttpClientAdapter.mockBase}/ok');
+    final cacheKey = resp.extra[CacheResponse.cacheKey];
+    expect(await store.exists(cacheKey), isTrue);
+
+    final resp304 = await dio.get(
+      '${MockHttpClientAdapter.mockBase}/ok',
+      options: Options(
+        headers: {'if-none-match': resp.headers['etag']},
+        validateStatus: (status) => status != null && ((status >= 200 && status < 300) || status == 304),
+      ),
     );
     expect(resp304.statusCode, equals(304));
     expect(resp.data['path'], equals('/ok'));
@@ -192,7 +209,7 @@ void main() {
         ),
       );
     } catch (err) {
-      expect((err as DioError).response?.statusCode, equals(500));
+      expect((err as DioException).response?.statusCode, equals(500));
     }
 
     try {
@@ -209,7 +226,7 @@ void main() {
         ),
       );
     } catch (err) {
-      expect((err as DioError).response?.statusCode, equals(500));
+      expect((err as DioException).response?.statusCode, equals(500));
       return;
     }
 
@@ -301,10 +318,10 @@ void main() {
     expect(cacheResp, isNotNull);
 
     // We're before max-age: 1
-    expect(cacheResp!.isExpired(requestCaching: CacheControl()), isFalse);
+    expect(cacheResp!.isExpired(CacheControl()), isFalse);
     // We're after max-age: 1
     await Future.delayed(const Duration(seconds: 1));
-    expect(cacheResp.isExpired(requestCaching: CacheControl()), isTrue);
+    expect(cacheResp.isExpired(CacheControl()), isTrue);
   });
 
   test('Skip downloads', () async {
